@@ -1,0 +1,947 @@
+// Assignment 2 - 1511 Climb
+//
+// This program was written by [Stephen Anastasiou] (z5478465)
+// on [27/10/23]
+//
+// The following code is a culmination of the creation, usage, manipulation and
+// problem solving at the helm of the art form that is Linked Lists, of which's 
+// craft is being used to implement a climbing logbook inspired by 'The Crag'.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdbool.h>
+
+////////////////////////////////////////////////////////////////////////////////
+///////////////////////////      Constants       ///////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// Provided constants
+#define MAX_STR_LEN 20
+#define HELP_COMMAND '?'
+
+// Provided enums
+// This enum only has to be used in Stage 3.1 onwards
+enum attempt_type {FIRST_GO, SUCCESS, FAIL, INVALID_TYPE};
+
+// TODO: Your #defines/enums can go here:
+
+////////////////////////////////////////////////////////////////////////////////
+//////////////////////////  USER DEFINED TYPES  ////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO: Any additional structs you want to add can go here:
+
+// Provided structs
+
+// Represents a single climbing route in the logbook
+struct route {
+    // The name of the climbing route
+    char name[MAX_STR_LEN];
+    // The difficulty of the route
+    int difficulty;
+    // The length of the route in metres
+    int length;
+    // A pointer to the next `struct route` in the logbook 
+    struct route *next;
+    struct attempt *attempts;
+};
+
+// Represents the logbook that contains info on each climbing route
+struct logbook {
+    // A pointer to the first `struct route` in the list
+    struct route *routes;
+};
+
+struct char_node {
+    char data;
+    struct char_node *next;
+};
+
+struct attempt {
+    char climber[MAX_STR_LEN];
+    enum attempt_type type;
+    int rating;
+    struct attempt *next;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////// PROVIDED FUNCTION PROTOTYPE  ////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+void print_usage(void); 
+void print_one_route(int position, struct route *route);
+void scan_string(char string[MAX_STR_LEN]);
+enum attempt_type scan_attempt_type();
+void print_one_attempt(
+    char climber[MAX_STR_LEN], 
+    enum attempt_type type, 
+    int rating
+);
+
+// Additional provided function prototypes
+// You won't need to use these functions!
+// We use them just to implement some of the provided helper functions.
+int scan_token(char *buffer, int buffer_size);
+enum attempt_type string_to_type(char *type_str);
+void type_to_string(char *buf, enum attempt_type type);
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////  YOUR FUNCTION PROTOTYPE  /////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+struct logbook *create_logbook();
+struct route *create_route(
+    char name[MAX_STR_LEN], 
+    int difficulty, 
+    int length
+);
+
+// TODO: Put your function prototypes here
+
+void append_route(struct logbook *logbook, char name[MAX_STR_LEN], int difficulty, int length);
+
+void print_all_routes(struct logbook *logbook);
+
+int route_exists(struct logbook *logbook, char name[MAX_STR_LEN]);
+
+void print_filtered_routes(struct logbook *logbook, int difficulty_min, int difficulty_max);
+
+void insert_route_before(struct logbook *logbook, char name[MAX_STR_LEN], int difficulty, int length, char route_to_insert_before[MAX_STR_LEN]);
+
+void change_route_lengths(struct logbook *logbook, char route_1[MAX_STR_LEN], char route_2[MAX_STR_LEN], int length_change);
+
+void swap_routes(struct route **head, char *route1, char *route2);
+
+void append_scan (struct logbook *logbook);
+
+void handle_difficulty_command(struct logbook *logbook);
+
+void handle_insert_command(struct logbook *logbook);
+
+void handle_length_change_command(struct logbook *logbook);
+
+void handle_swaproutes_command(struct logbook *logbook);
+
+void add_attempt(struct logbook *logbook);
+
+void print_logbook(struct logbook *logbook);
+
+void remove_route(struct logbook *logbook, char *route_name);
+
+void free_logbook(struct logbook *logbook);
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+int main(void) {
+    printf("Welcome to 1511 Climb! \n");
+    printf("Log all of your climbing adventures here! \n");
+
+    struct logbook *logbook = create_logbook();    
+
+    char command;
+    printf("Enter command: ");
+    while (scanf(" %c", &command) == 1) {
+
+        if (command == '?') {
+            print_usage();
+        }
+        else if (command == 'r') {
+            append_scan(logbook);
+        }
+        else if (command == 'p') {
+            print_all_routes(logbook);
+        }
+        else if (command == 'f') {
+            handle_difficulty_command(logbook);
+        }
+        else if (command == 'i') {
+            handle_insert_command(logbook);
+        }
+        else if (command == 'l') {
+            handle_length_change_command(logbook);
+        }
+        else if (command == 's') {
+            handle_swaproutes_command(logbook);
+        }
+        else if (command == 'a') {
+            add_attempt(logbook);
+        }
+        else if (command == 'P') {
+            print_logbook(logbook);
+        }
+        else if (command == 'R') {
+        char route_name[MAX_STR_LEN];
+            scanf("%19s", route_name);  // Limit the input to MAX_STR_LEN - 1 characters
+            remove_route(logbook, route_name);
+        }
+        printf("Enter command: ");
+
+    }
+
+    free_logbook(logbook);
+
+    printf("\nGoodbye\n");
+    return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////  YOUR FUNCTIONS //////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// Allocate memory for a new struct logbook and return a pointer to it
+//
+// Parameters:
+//      None
+// 
+// Returns:
+//      new_logbook - a pointer to the newly created struct logbook
+struct logbook *create_logbook() {
+    struct logbook *new_logbook = malloc(sizeof(struct logbook));
+    new_logbook->routes = NULL;
+    return new_logbook;
+}
+
+
+// STAGE 1.1
+// TODO: what does this function do?
+// Allocates memory for a new climbing route, initializes its fields,
+// and returns a pointer to it.
+// 
+// Parameters:
+//      name - Name of the climbing route
+//      difficulty - Difficulty level of the climbing route
+//      length - length of the climbing route in meters
+// 
+// Returns:
+//      A pointer to the newly created climbing route
+struct route *create_route(
+    char name[MAX_STR_LEN], 
+    int difficulty, 
+    int length
+) {
+    struct route *new_route = (struct route *) malloc(sizeof(struct route));
+    if (!new_route) {
+        printf("Memory allocation failed for new route.\n");
+        exit(1);
+    }
+    
+    // Copy the name into the struct's name field
+    strcpy(new_route->name, name);
+
+    // Copy the difficulty and length into the corresponding struct fields.
+    new_route->difficulty = difficulty;
+    new_route->length = length;
+
+    // Initialize the next pointer to NULL
+    new_route->next = NULL;
+    new_route->attempts = NULL;
+    // hint: you will have to replace NULL in this return statement.
+    // NULL has been replaced with 'new_route'
+    // this return is a pointer to the newly created climbing route
+    return new_route;
+}
+
+// TODO: Put your functions here
+
+void append_route(struct logbook *logbook,
+                  char name[MAX_STR_LEN], 
+                  int difficulty, 
+                  int length) {
+    struct route *new_route = create_route(name, difficulty, length);
+    if (logbook->routes == NULL) {
+        // If the logbook is empty, add the new route as the first route
+        logbook->routes = new_route;
+    } else {
+        // Otherwise, traverse to the end of the list and append the new route
+        struct route *current = logbook->routes;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = new_route;
+    }
+}
+
+void print_all_routes(struct logbook *logbook) {
+    if (logbook->routes == NULL) {
+        printf("There are no routes in this logbook!\n");
+        return;
+    }
+
+    struct route *current = logbook->routes;
+    int position = 1;
+    while (current != NULL) {
+        print_one_route(position, current);
+        current = current->next;
+        position++;
+    }
+}
+
+int route_exists(struct logbook *logbook, char name[MAX_STR_LEN]) {
+    struct route *current = logbook->routes;
+    while (current != NULL) {
+        if (strcmp(current->name, name) == 0) {
+            return 1; 
+        }
+        current = current->next;
+    }
+    return 0; 
+}
+
+void print_filtered_routes(struct logbook *logbook, 
+                           int difficulty_min, 
+                           int difficulty_max) {
+    printf("Routes between difficulty %d and %d:\n", difficulty_min, difficulty_max);
+
+    struct route *current = logbook->routes;
+    int position = 1;
+    while (current != NULL) {
+        if (current->difficulty >= difficulty_min && 
+            current->difficulty <= difficulty_max) {
+            print_one_route(position, current);
+        }
+        current = current->next;
+        position++;
+    }
+}
+
+void insert_route_before(struct logbook *logbook, 
+                         char name[MAX_STR_LEN], 
+                         int difficulty, int length, 
+                         char route_to_insert_before[MAX_STR_LEN]) {
+    struct route *new_route = create_route(name, difficulty, length);
+    struct route *current = logbook->routes;
+    struct route *prev = NULL;
+
+    while (current != NULL && strcmp(current->name, route_to_insert_before) != 0) {
+        prev = current;
+        current = current->next;
+    }
+
+    if (prev == NULL) { 
+        new_route->next = logbook->routes;
+        logbook->routes = new_route;
+    } else {
+        new_route->next = prev->next;
+        prev->next = new_route;
+    }
+}
+
+void change_route_lengths(struct logbook *logbook, 
+                          char route_1_name[MAX_STR_LEN], 
+                          char route_2_name[MAX_STR_LEN], 
+                          int length_change) {
+    struct route *route_1 = NULL;
+    struct route *route_2 = NULL;
+    struct route *current = logbook->routes;
+
+    // Find the routes with the given names
+    while (current != NULL) {
+        if (strcmp(current->name, route_1_name) == 0) {
+            route_1 = current;
+        }
+        if (strcmp(current->name, route_2_name) == 0) {
+            route_2 = current;
+        }
+        current = current->next;
+    }
+
+    // Check for errors
+    if (route_1 == NULL) {
+        printf("ERROR: No route with the name '%s' "
+               "exists in this logbook\n", route_1_name);
+        return;
+    }
+    if (route_2 == NULL) {
+        printf("ERROR: No route with the name '%s' "
+               "exists in this logbook\n", route_2_name);
+        return;
+    }
+
+    // Ensure route_1 is before route_2 in the list
+    if (route_2->next == route_1) {
+        struct route *temp = route_1;
+        route_1 = route_2;
+        route_2 = temp;
+    }
+
+    // Change the lengths of the routes between route_1 and route_2
+    current = route_1;
+    while (current != NULL && current != route_2->next) {
+        if (current->length + length_change <= 0 ||
+            current->length + length_change > 60) {
+            printf("ERROR: Invalid length change! "
+                   "No route lengths have been changed\n");
+            return;
+        }
+        current = current->next;
+    }
+
+    current = route_1;
+    while (current != NULL && current != route_2->next) {
+        printf("Length of '%s' updated from %dm to %dm\n", 
+               current->name, 
+               current->length, 
+               current->length + length_change);
+        current->length += length_change;
+        current = current->next;
+    }
+}
+
+void swap_routes(struct route **head, char *route1, char *route2) {
+    if (strcmp(route1, route2) == 0) {
+        printf("ERROR: Cannot swap '%s' with itself\n", route1);
+        return;
+    }
+
+    struct route *prev1 = NULL, *curr1 = *head;
+    while (curr1 && strcmp(curr1->name, route1) != 0) {
+        prev1 = curr1;
+        curr1 = curr1->next;
+    }
+
+    struct route *prev2 = NULL, *curr2 = *head;
+    while (curr2 && strcmp(curr2->name, route2) != 0) {
+        prev2 = curr2;
+        curr2 = curr2->next;
+    }
+
+    if (!curr1) {
+        printf("ERROR: No route with the name '%s' exists in this logbook\n", route1);
+        return;
+    }
+
+    if (!curr2) {
+        printf("ERROR: No route with the name '%s' exists in this logbook\n", route2);
+        return;
+    }
+
+    if (curr1->next == curr2) { // If route1 is immediately before route2
+        if (prev1) {
+            prev1->next = curr2;
+        } else {
+            *head = curr2;
+        }
+        curr1->next = curr2->next;
+        curr2->next = curr1;
+    } else if (curr2->next == curr1) { // If route2 is immediately before route1
+        if (prev2) {
+            prev2->next = curr1;
+        } else {
+            *head = curr1;
+        }
+        curr2->next = curr1->next;
+        curr1->next = curr2;
+    } else { // If route1 and route2 are not adjacent
+        if (prev1) {
+            prev1->next = curr2;
+        } else {
+            *head = curr2;
+        }
+        if (prev2) {
+            prev2->next = curr1;
+        } else {
+            *head = curr1;
+        }
+        struct route *temp = curr1->next;
+        curr1->next = curr2->next;
+        curr2->next = temp;
+    }
+
+    printf("'%s' swapped positions with '%s'!\n", route1, route2);
+}
+
+void append_scan (struct logbook *logbook) {
+    char route_name[MAX_STR_LEN];
+    int route_difficulty, route_length;
+
+    // Scan the route details
+    scan_string(route_name);
+    scanf("%d %d", &route_difficulty, &route_length);
+
+    // Check for errors
+    if (route_difficulty <= 0 || route_difficulty > 39) {
+        printf("ERROR: Route difficulty must be between 1 and 39\n");
+    } else if (route_length <= 0 || route_length > 60) {
+        printf("ERROR: Route length must be between 1m and 60m\n");
+    } else if (route_exists(logbook, route_name)) {
+        printf("ERROR: A route with the name '%s' "
+                "already exists in this logbook\n", route_name);
+    } else {
+        // Append the route to the logbook
+        append_route(logbook, route_name, route_difficulty, route_length);
+        // Print confirmation message
+        printf("Route '%s' added successfully!\n", route_name);
+    }
+}
+
+void handle_difficulty_command(struct logbook *logbook) { 
+    int difficulty_min, difficulty_max;
+    scanf("%d %d", &difficulty_min, &difficulty_max);
+
+    // Check for errors
+    if (difficulty_min <= 0 || difficulty_min > 39 || 
+        difficulty_max <= 0 || difficulty_max > 39 || 
+        difficulty_min > difficulty_max) {
+        printf("ERROR: Difficulty range invalid!\n");
+    } else {
+        print_filtered_routes(logbook, difficulty_min, difficulty_max);
+    }
+}
+
+void handle_insert_command(struct logbook *logbook) { 
+    char route_name[MAX_STR_LEN];
+    char route_to_insert_before[MAX_STR_LEN];
+    int route_difficulty, route_length;
+
+    // Scan the route details
+    scan_string(route_name);
+    scanf("%d %d", &route_difficulty, &route_length);
+    scan_string(route_to_insert_before);
+
+    // Check for errors
+    if (route_difficulty <= 0 || route_difficulty > 39) {
+        printf("ERROR: Route difficulty must be between 1 and 39\n");
+    } else if (route_length <= 0 || route_length > 60) {
+        printf("ERROR: Route length must be between 1m and 60m\n");
+    } else if (route_exists(logbook, route_name)) {
+        printf("ERROR: A route with the name '%s' "
+               "already exists in this logbook\n", route_name);
+    } else if (!route_exists(logbook, route_to_insert_before)) {
+        printf("ERROR: No route with the name '%s' "
+               "exists in this logbook\n", route_to_insert_before);
+    } else {
+        // Insert the route before the specified route
+        insert_route_before(logbook, route_name, route_difficulty, 
+            route_length, route_to_insert_before);
+        // Print confirmation message
+        printf("Route '%s' inserted successfully!\n", route_name);
+    }
+}
+
+void handle_length_change_command(struct logbook *logbook) {
+    char route_1_name[MAX_STR_LEN];
+    char route_2_name[MAX_STR_LEN];
+    int length_change;
+
+    // Scan the route names and length change
+    scan_string(route_1_name);
+    scan_string(route_2_name);
+    scanf("%d", &length_change);
+
+    // Call the function to change the route lengths
+    change_route_lengths(logbook, route_1_name, route_2_name, length_change);
+}
+
+void handle_swaproutes_command(struct logbook *logbook) {
+    char route_1_name[MAX_STR_LEN];
+    char route_2_name[MAX_STR_LEN];
+
+    // Scan the route names
+    scan_string(route_1_name);
+    scan_string(route_2_name);
+
+    // Call the function to swap the routes
+    swap_routes(&(logbook->routes), route_1_name, route_2_name);
+}
+
+void add_attempt(struct logbook *logbook) {
+    char climber[MAX_STR_LEN];
+    enum attempt_type type;
+    int rating;
+    char route_name[MAX_STR_LEN];
+
+    // Scan the input values
+    scan_string(climber);
+    type = scan_attempt_type();
+    scanf("%d", &rating);
+    scan_string(route_name);
+
+    // Error checks
+    if (type == INVALID_TYPE) {
+        printf("ERROR: Attempt type invalid\n");
+        return;
+    }
+    if (rating < 0 || rating > 3) {
+        printf("ERROR: Rating must be between 0 and 3\n");
+        return;
+    }
+
+    // Find the route by name
+    struct route *current_route = logbook->routes;
+    while (current_route && strcmp(current_route->name, route_name) != 0) {
+        current_route = current_route->next;
+    }
+    if (!current_route) {
+        printf("ERROR: No route with the name '%s' exists in this logbook\n", route_name);
+        return;
+    }
+
+    // Check for duplicate attempt of the same type or a "first_go" after any attempt
+    struct attempt *current_attempt = current_route->attempts;
+    while (current_attempt) {
+        if (strcmp(current_attempt->climber, climber) == 0 
+        && (current_attempt->type == type || type == FIRST_GO)) {
+            printf("ERROR: %s has already attempted '%s'"
+            " - they can't get it on their first go!\n", climber, route_name);
+            return;
+        }
+        current_attempt = current_attempt->next;
+    }
+
+    // Create a new attempt
+    struct attempt *new_attempt = (struct attempt *) malloc(sizeof(struct attempt));
+    if (!new_attempt) {
+        printf("Memory allocation failed\n");
+        exit(1);
+    }
+    strcpy(new_attempt->climber, climber);
+    new_attempt->type = type;
+    new_attempt->rating = rating;
+
+    // Insert the new attempt at the beginning of the attempts list
+    new_attempt->next = current_route->attempts;
+    current_route->attempts = new_attempt;
+
+    // Print the log message
+    printf("Logged attempt of '%s' by %s\n", route_name, climber);
+}
+
+void print_logbook(struct logbook *logbook) {
+    struct route *current_route = logbook->routes;
+
+    if (!current_route) {
+        printf("There are no routes in this logbook!\n");
+        return;
+    }
+
+    int route_position = 1;
+
+    while (current_route) {
+        double total_rating = 0.0;
+        int attempt_count = 0;
+
+        struct attempt *current_attempt = current_route->attempts;
+        while (current_attempt) {
+            total_rating += current_attempt->rating;
+            attempt_count++;
+            current_attempt = current_attempt->next;
+        }
+
+        double avg_rating;
+        if (attempt_count) {
+            avg_rating = total_rating / attempt_count;
+        } else {
+            avg_rating = 0.0;
+        }
+
+        printf("Route #%d: %s\n", route_position, current_route->name);
+        printf("Difficulty: %d | Length: %dm | Avg rating: %.1lf/3.0\n", 
+            current_route->difficulty, current_route->length, avg_rating);
+
+        current_attempt = current_route->attempts;
+        while (current_attempt) {
+            print_one_attempt(current_attempt->climber, 
+                              current_attempt->type, 
+                              current_attempt->rating);
+            current_attempt = current_attempt->next;
+        }
+
+        current_route = current_route->next;
+        route_position++;
+    }
+}
+
+void remove_route(struct logbook *logbook, char *route_name) {
+    struct route *current = logbook->routes;
+    struct route *prev = NULL;
+
+    // Search for the route in the linked list
+    while (current != NULL && strcmp(current->name, route_name) != 0) {
+        prev = current;
+        current = current->next;
+    }
+
+    // If the route is not found
+    if (current == NULL) {
+        printf("ERROR: No route with the name '%s' exists in this logbook\n", route_name);
+        return;
+    }
+
+    // If the route is the first node
+    if (prev == NULL) {
+        logbook->routes = current->next;
+    } else {
+        prev->next = current->next;
+    }
+
+    // Free the memory of the attempts associated with the route
+    struct attempt *attempt = current->attempts;
+    while (attempt != NULL) {
+        struct attempt *temp = attempt;
+        attempt = attempt->next;
+        free(temp);
+    }
+
+    // Free the memory of the route
+    free(current->name);
+    free(current);
+
+    printf("Removed route '%s' from logbook\n", route_name);
+}
+
+// Function to free all memory associated with a logbook
+void free_logbook(struct logbook *logbook) {
+    struct route *current_route = logbook->routes;
+    while (current_route) {
+        struct route *temp_route = current_route;
+        current_route = current_route->next;
+
+        // Free all attempts for this route
+        struct attempt *current_attempt = temp_route->attempts;
+        while (current_attempt) {
+            struct attempt *temp_attempt = current_attempt;
+            current_attempt = current_attempt->next;
+            free(temp_attempt);
+        }
+
+        // Free the route itself
+        free(temp_route);
+    }
+
+    // Free the logbook
+    free(logbook);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///////////////////////////  PROVIDED FUNCTIONS  ///////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// Prints the 1511 Climb usage instructions,
+// displaying the different commands and their arguments.
+//
+// Parameters:
+//      None
+// 
+// Returns: 
+//      None
+void print_usage(void) {
+    printf(
+        "=====================[     1511 Climb     ]=====================\n"
+        "      ===============[     Usage Info     ]===============      \n"
+        "  r [name] [difficulty] [length]                                \n"
+        "    Append a climbing route to the end of the logbook           \n"
+        "  p                                                             \n"
+        "    Print out all the climbing routes in the logbook            \n"
+        "                                                                \n"
+        "  f [difficulty_min] [difficulty_max]                           \n"
+        "    Filter routes by difficulty                                 \n"
+        "  i [name] [difficulty] [length] [route_to_insert_before]       \n"
+        "    Insert a climbing route into the logbook before             \n"
+        "    `route_to_insert_before`                                    \n"
+        "  l [route_1] [route_2] [length_change]                         \n"
+        "    Change length of all routes between `route_1` and `route_2` \n"
+        "  s [route_1] [route_2]                                         \n"
+        "    Swap 2 routes                                               \n"
+        "                                                                \n"
+        "  a [climber] [attempt_type] [rating] [route]                   \n"
+        "    Add an attempt of `route` by `climber`                      \n"
+        "  P                                                             \n"
+        "    Print out all the routes and attempts in the logbook        \n"
+        "  R [route]                                                     \n"
+        "    Remove a route and all associated attempts                  \n"
+        "  D [climber]                                                   \n"
+        "    Delete all attempts by `climber`                            \n"
+        "  d [climber_1] [climber_2]                                     \n"
+        "    Duplicate all of `climber_2`s attempts for `climber_1`      \n"
+        "                                                                \n"
+        "  c [route_1] [route_2]                                         \n"
+        "    Combine 2 routes                                            \n"
+        "  L [route]                                                     \n"
+        "    Print the climber leaderboard for `route`                   \n"
+        "                                                                \n"
+        "  ?                                                             \n"
+        "    Show help                                                   \n"
+        "================================================================\n"
+    );
+}
+
+// Prints a single route, displaying its position in the logbook, name, grade 
+// and length. 
+//
+// Parameters:
+//      position    - The position of the route in the logbook (the first 
+//                        route will be route_number 1, second will be 2, etc)
+//      route       - A pointer to the struct route to be printed
+//
+// Returns:   
+//      None
+void print_one_route(int position, struct route *route) {
+    int line_length = MAX_STR_LEN + 2;
+    printf("/--------- \\/ ---------\\\n");
+
+    char position_str[MAX_STR_LEN];
+    sprintf(position_str, "Route #%d", position);
+    int padding = line_length - strlen(position_str);
+    printf(
+        "|%*s%s%*s|\n", padding / 2, "", position_str, (padding + 1) / 2, ""
+    );
+
+    padding = line_length - strlen(route->name);
+    printf("|%*s%s%*s|\n", padding / 2, "", route->name, (padding + 1) / 2, "");
+
+    printf("|    Difficulty: %2d    |\n", route->difficulty);
+    printf("|    Length (m): %2d    |\n", route->length);
+    printf("\\--------- || ---------/\n");
+}
+
+// Scans a string into the provided char array, placing a '\0' at the end
+// 
+// Parameters:
+//      string      - a char array of length MAX_STR_LEN to store the string 
+//                    that is scanned in
+// 
+// Returns: 
+//      None
+// 
+// Usage: 
+// ```
+//      char string[MAX_STR_LEN];
+//      scan_string(string);
+// ```
+void scan_string(char string[MAX_STR_LEN]) {
+    scan_token(string, MAX_STR_LEN);
+}
+
+// Scans a string and converts it to an enum attempt_type.
+//
+// Parameters: 
+//      None
+// 
+// Returns:
+//      The corresponding attempt_type, if the string was valid,
+//      Otherwise, returns INVALID_TYPE.
+// 
+// Usage: 
+// ```
+//      enum attempt_type type = scan_attempt_type();
+// ```
+enum attempt_type scan_attempt_type(void) {
+    char type[MAX_STR_LEN];
+    scan_token(type, MAX_STR_LEN);
+    return string_to_type(type);
+}
+
+// Prints a single attempt, displaying the climber name, attempt type and rating
+//
+// Parameters:
+//      climber     - The name of the climber who attempted to climb a route
+//      type        - The attempt type that was made (should be either 
+//                    FIRST_GO, SUCCESS, or FAIL)
+//      rating      - The star rating that the climber gave the route
+// 
+// Returns: 
+//      None
+void print_one_attempt(
+    char climber[MAX_STR_LEN], 
+    enum attempt_type type, 
+    int rating
+) {
+    char type_string[MAX_STR_LEN];
+    type_to_string(type_string, type);
+    printf("        --> %s\n", type_string);
+    printf("            Climber: %s\n", climber);
+    printf("            Rating:  ");
+    for (int i = 0; i < rating; i++) {
+        printf("*");
+    }
+    printf("\n\n");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////// ADDITIONAL PROVIDED FUNCTIONS ///////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// You don't need to use any of these, or understand how they work!
+// We use them to implement some of the provided helper functions.
+
+// Scans a single word into `buffer`, ignoring whitespace
+// 
+// Parameters: 
+//      buffer      - the string to store the scanned word
+//      buffer_size - the maximum size of string that can be scanned (including 
+//                    the null terminator)
+// Returns: 
+//      The number of chars scanned successfully
+int scan_token(char *buffer, int buffer_size) {
+    if (buffer_size == 0) {
+        return 0;
+    }
+
+    char c;
+    int i = 0;
+    int num_scanned = 0;
+
+    // Consume all leading whitespace
+    scanf(" ");
+
+    // Scan in characters until whitespace
+    while (i < buffer_size - 1
+        && (num_scanned = scanf("%c", &c)) == 1 
+        && !isspace(c)) {
+        buffer[i++] = c;
+    }
+
+    if (i > 0) {
+        buffer[i] = '\0';
+    }
+
+    return num_scanned;
+}
+
+// Converts a string to the corresponding enum attempt_type
+//
+// Parameters: 
+//      type_str    - The string to be converted
+// 
+// Returns: 
+//      The matching enum attempt_type, or `INVALID_TYPE` if `type_str` matches 
+//      no valid attempt type
+enum attempt_type string_to_type(char *type_str) {
+    int len = MAX_STR_LEN;
+
+    if (strncasecmp(type_str, "first_go", len) == 0) {
+        return FIRST_GO;
+    }
+    if (strncasecmp(type_str, "success", len) == 0) {
+        return SUCCESS;
+    } 
+    if (strncasecmp(type_str, "fail", len) == 0) {
+        return FAIL;
+    } 
+
+    return INVALID_TYPE;
+}
+
+// Converts an enum attempt_type to a string
+// 
+// Parameters:
+//      buf         - The string to store the attempt type
+//      type        - The enum attempt_type to be converted
+// 
+// Returns:
+//      None
+void type_to_string(char *buf, enum attempt_type type) {
+    if (type == FIRST_GO) {
+        strcpy(buf, "FIRST GO");
+    } else if (type == SUCCESS) {
+        strcpy(buf, "SUCCESS");
+    } else if (type == FAIL) {
+        strcpy(buf, "FAIL");
+    } else {
+        strcpy(buf, "INVALID");
+    }
+}
